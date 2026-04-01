@@ -1,4 +1,5 @@
 package com.example.demo;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -64,6 +65,9 @@ class User {
 }
 
 interface UserRepository extends JpaRepository<User, Long> {
+    // NEW: Custom query methods
+    Optional<User> findByEmail(String email);
+    List<User> findByNameContainingIgnoreCase(String name);
 }
 
 @Service
@@ -99,6 +103,41 @@ class UserService {
     public void deleteUser(Long id) {
         userRepository.deleteById(id);
     }
+
+    // NEW: Find by exact email
+    public Optional<User> getUserByEmail(String email) {
+        return userRepository.findByEmail(email);
+    }
+
+    // NEW: Search by name (partial match)
+    public List<User> searchUsersByName(String name) {
+        return userRepository.findByNameContainingIgnoreCase(name);
+    }
+
+    // NEW: Bulk create users
+    public List<User> createBulkUsers(List<User> users) {
+        return userRepository.saveAll(users);
+    }
+
+    // NEW: Partial update (PATCH)
+    public User patchUser(Long id, User userDetails) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
+
+        // Only update fields that are provided (not null)
+        if (userDetails.getName() != null) {
+            user.setName(userDetails.getName());
+        }
+        if (userDetails.getEmail() != null) {
+            user.setEmail(userDetails.getEmail());
+        }
+        return userRepository.save(user);
+    }
+
+    // NEW: Delete all users
+    public void deleteAllUsers() {
+        userRepository.deleteAll();
+    }
 }
 
 @RestController
@@ -110,6 +149,8 @@ class UserController {
     public UserController(UserService userService) {
         this.userService = userService;
     }
+
+    // --- Original Endpoints ---
 
     @GetMapping
     public List<User> getAllUsers() {
@@ -135,5 +176,42 @@ class UserController {
     public void deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
     }
-}
 
+    // --- NEW Endpoints ---
+
+    // 1. Get user by email
+    // Example: GET /api/users/email/john@example.com
+    @GetMapping("/email/{email}")
+    public Optional<User> getUserByEmail(@PathVariable String email) {
+        return userService.getUserByEmail(email);
+    }
+
+    // 2. Search users by partial name
+    // Example: GET /api/users/search?name=john
+    @GetMapping("/search")
+    public List<User> searchUsersByName(@RequestParam String name) {
+        return userService.searchUsersByName(name);
+    }
+
+    // 3. Create multiple users at once
+    // Example: POST /api/users/bulk (Pass an array of User objects)
+    @PostMapping("/bulk")
+    public List<User> createBulkUsers(@RequestBody List<User> users) {
+        return userService.createBulkUsers(users);
+    }
+
+    // 4. Partially update a user
+    // Example: PATCH /api/users/1 (Pass just { "email": "newemail@example.com" })
+    @PatchMapping("/{id}")
+    public User patchUser(@PathVariable Long id, @RequestBody User userDetails) {
+        return userService.patchUser(id, userDetails);
+    }
+
+    // 5. Delete all users
+    // Example: DELETE /api/users/all
+    @DeleteMapping("/all")
+    public String deleteAllUsers() {
+        userService.deleteAllUsers();
+        return "All users have been deleted successfully.";
+    }
+}
